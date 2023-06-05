@@ -1,4 +1,4 @@
-package com.lamti.wavetimer.presentation
+package com.lamti.wavetimer.presentation.timer
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.TweenSpec
@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,45 +18,44 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
-import kotlinx.coroutines.delay
 
 private val path = Path()
 
 @Composable
 fun WaveTimer(
-    totalTime: Long,
+    isInAmbientState: Boolean,
+    currentTime: String,
+    progress: Float,
     modifier: Modifier = Modifier,
     targetColor: Color = MaterialTheme.colors.primary,
-    initialValue: Float = 1f,
+    isTimerRunning: Boolean = false,
     waveHeight: Float = 80f,
     screenHeight: Int = 900,
-    onComplete: () -> Unit,
+    onResetClick: () -> Unit,
+    onPlayClick: () -> Unit,
 ) {
     val screenHeightPx = with(LocalDensity.current) { screenHeight * density }
-
-    var translationY by remember { mutableStateOf(screenHeightPx) }
-    var progress by remember { mutableStateOf(initialValue) }
-    var currentTime by remember { mutableStateOf(totalTime) }
-    var isTimerRunning by remember { mutableStateOf(false) }
-    var resetTimer by remember { mutableStateOf(false) }
+    val translationY by remember(progress) { mutableStateOf(progress * screenHeightPx) }
 
     val deltaXAnim = rememberInfiniteTransition()
     val dx by deltaXAnim.animateFloat(
@@ -68,26 +68,6 @@ fun WaveTimer(
         targetValue = waveHeight,
         animationSpec = TweenSpec(durationMillis = 300, easing = LinearEasing),
     )
-    
-    LaunchedEffect(currentTime, isTimerRunning, resetTimer) {
-        if (resetTimer) {
-            resetTimer = false
-            progress = initialValue
-            translationY = screenHeightPx
-            currentTime = totalTime
-        }
-
-        if (currentTime > 0L && isTimerRunning) {
-            delay(100L)
-            currentTime -= 100L
-            progress = currentTime / totalTime.toFloat()
-            translationY = progress * screenHeightPx
-        }
-
-        if (currentTime == 0L) {
-            onComplete()
-        }
-    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Canvas(
@@ -103,32 +83,16 @@ fun WaveTimer(
                 }
             }
         )
-        Text(
-            modifier = Modifier.align(Alignment.Center),
-            text = (currentTime / 1000L).toString(),
-            fontSize = 84.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .padding(top = 16.dp),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Button(onClick = { isTimerRunning = !isTimerRunning }) {
-                Text(text = if (isTimerRunning) "Stop" else "Start")
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(
-                onClick = {
-                    isTimerRunning = false
-                    resetTimer = true
-                }
-            ) {
-                Text(text = "reset")
-            }
+
+        if (isInAmbientState) {
+            AmbientContent(currentTime = currentTime)
+        } else {
+            ActiveContent(
+                currentTime = currentTime,
+                isTimerRunning = isTimerRunning,
+                onPlayClick = onPlayClick,
+                onResetClick = onResetClick
+            )
         }
     }
 }
@@ -162,4 +126,53 @@ private fun DrawScope.waveUI(path: Path, color: Color, dx: Float, waveHeight: Fl
     path.lineTo(size.width, size.height)
     path.lineTo(0f, size.height)
     path.close()
+}
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+private fun BoxScope.AmbientContent(currentTime: String) {
+    Text(
+        modifier = Modifier.align(Alignment.Center),
+        text = currentTime,
+        fontWeight = FontWeight.Bold,
+        style = TextStyle.Default.copy(
+            fontSize = 48.sp,
+            drawStyle = Stroke(
+                miter = 10f,
+                width = 5f,
+                join = StrokeJoin.Round
+            )
+        )
+    )
+}
+
+@Composable
+private fun BoxScope.ActiveContent(
+    currentTime: String,
+    isTimerRunning: Boolean,
+    onPlayClick: () -> Unit,
+    onResetClick: () -> Unit
+) {
+    Text(
+        modifier = Modifier.align(Alignment.Center),
+        text = currentTime,
+        fontSize = 48.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color.White
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .align(Alignment.TopCenter)
+            .padding(top = 16.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Button(onClick = onPlayClick) {
+            Text(text = if (isTimerRunning) "Stop" else "Start")
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Button(onClick = onResetClick) {
+            Text(text = "reset")
+        }
+    }
 }
